@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  server: { proxy: { "/api": "http://127.0.0.1:9160" } },
+  server: { proxy: { "/api": "http://127.0.0.1:9170" } },
 });
