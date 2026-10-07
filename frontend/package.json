@@ -4,12 +4,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node component-e2e.mjs"
   },
   "dependencies": {
     "lit": "^3.2.1"
   },
   "devDependencies": {
+    "happy-dom": "^20.14.5",
     "vite": "^5.4.11"
   }
 }

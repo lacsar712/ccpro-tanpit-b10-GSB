@@ -1,3 +1,4 @@
+from django.db import transaction
 from ninja import NinjaAPI, Schema
 from ninja.errors import HttpError
 
@@ -22,6 +23,10 @@ class StatusIn(Schema):
     status: str
 
 
+class VillageIn(Schema):
+    village: str
+
+
 def pit_json(pit: Pit) -> dict:
     return {
         "id": pit.id,
@@ -32,6 +37,20 @@ def pit_json(pit: Pit) -> dict:
         "latestPh": latest_ph(pit),
         "sampleCount": pit.samples.count(),
     }
+
+
+def first_yard() -> Yard:
+    yard = Yard.objects.first()
+    if yard is None:
+        raise HttpError(404, "尚无鞣场")
+    return yard
+
+
+def require_admin(request) -> User:
+    user = request.auth
+    if user is None or user.role != "admin":
+        raise HttpError(403, "仅主管可修改村名")
+    return user
 
 
 @api.post("/auth/login")
@@ -60,6 +79,55 @@ def board(request):
         raise HttpError(404, "尚无鞣场")
     pits = sorted(yard.pits.all(), key=lambda p: (p.row, p.col))
     return {"yard": yard.name, "village": yard.village, "pits": [pit_json(p) for p in pits]}
+
+
+@api.get("/yard", auth=auth)
+def yard_detail(request):
+    yard = first_yard()
+    # role 随接口下发，供专页决定只读还是可编辑
+    return {"yard": yard.name, "village": yard.village, "role": request.auth.role}
+
+
+@api.patch("/yard/village", auth=auth)
+def update_village(request, payload: VillageIn):
+    require_admin(request)
+    village = payload.village.strip()
+    if not village:
+        raise HttpError(400, "村名不能为空")
+    if len(village) > 120:
+        raise HttpError(400, "村名最长 120 字")
+    # 行锁内只写 village 一列：两名主管并发各交一名，提交顺序即生效顺序，
+    # 库里最终只可能留一版；场名、坑位、酸碱读数全程不碰。
+    with transaction.atomic():
+        yard = Yard.objects.select_for_update().first()
+        if yard is None:
+            raise HttpError(404, "尚无鞣场")
+        yard.village = village
+        yard.save(update_fields=["village"])
+    return {"yard": yard.name, "village": yard.village, "role": request.auth.role}
+
+
+@api.get("/samples", auth=auth)
+def sample_log(request):
+    """浸液登记流水。村列取鞣场当前村名——改名后历史流水也跟新名走。"""
+    yard = first_yard()
+    samples = yard.pits.all().values_list(
+        "code", "samples__id", "samples__ph", "samples__operator", "samples__taken_at"
+    )
+    rows = [
+        {
+            "id": sid,
+            "pitCode": code,
+            "village": yard.village,
+            "ph": ph,
+            "operator": operator or "",
+            "takenAt": taken_at.isoformat(),
+        }
+        for code, sid, ph, operator, taken_at in samples
+        if sid is not None
+    ]
+    rows.sort(key=lambda r: r["takenAt"], reverse=True)
+    return {"yard": yard.name, "village": yard.village, "rows": rows}
 
 
 @api.post("/pits/{pit_id}/samples", auth=auth)

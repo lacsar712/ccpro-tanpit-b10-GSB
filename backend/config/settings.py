@@ -19,17 +19,26 @@ ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-url = urlparse(os.environ.get("DATABASE_URL", "postgres://tanpit:tanpit@127.0.0.1:6170/tanpit"))
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": url.path.lstrip("/"),
-        "USER": url.username,
-        "PASSWORD": url.password,
-        "HOST": url.hostname,
-        "PORT": url.port or 5432,
+if os.environ.get("DB_ENGINE") == "sqlite":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            "OPTIONS": {"timeout": 20, "transaction_mode": "IMMEDIATE", "init_command": "PRAGMA journal_mode=WAL"},
+        }
     }
-}
+else:
+    url = urlparse(os.environ.get("DATABASE_URL", "postgres://tanpit:tanpit@127.0.0.1:6170/tanpit"))
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": url.path.lstrip("/"),
+            "USER": url.username,
+            "PASSWORD": url.password,
+            "HOST": url.hostname,
+            "PORT": url.port or 5432,
+        }
+    }
 LANGUAGE_CODE = "zh-hans"
 TIME_ZONE = "Asia/Shanghai"
 USE_TZ = True
